@@ -2,7 +2,7 @@
 
 # Check for configuration
 if [ -z $1 ]; then
-	echo -ne "Sorry, you must specify the configuration location\n"
+	echo -ne "Sorry, you must specify the configuration location.\n"
 	exit 1
 else
 	# Make sure the conf file exists
@@ -15,12 +15,18 @@ else
 	fi
 fi
 
+# Check that $LOGFILE exists
+touch $LOGFILE
+if [ ! -e $LOGFILE ]; then
+	echo -ne "$LOGFILE not found.\n"
+fi
+
 # Set the default exit status to failure (non-zero)
 EXIT_STATUS=1
 
-echo -e "($($DATEFMT)) Starting\n" >> $LOGFILE
+echo "($($DATEFMT)) Status: Started" >> $LOGFILE
 
-echo -e "(i$($DATEFMT)) Sending test email\n" >> $LOGFILE
+echo "($($DATEFMT)) Status: Sending test email" >> $LOGFILE
 
 function echomail {
 echo -ne "helo ${HOSTNAME}\r\n"
@@ -34,60 +40,72 @@ sleep 2
 echo -ne "Content-type: text/html\r\n"
 echo -ne "From: <${MAILFROM}>\r\n"
 echo -ne "To: <${MAILTO}>\r\n"
-echo -ne "Subject: MAILCHK\r\n"
+echo -ne "Subject: CHKMAIL\r\n"
 echo -ne "\r\n"
 echo -ne ${emailHTMLStr//\\n/$newline}"\r\n"
 echo -ne "\012.\012" 
 echo -ne "quit"
 sleep 5
 } 
-# for starttls:
-echomail | openssl s_client -starttls smtp -crlf -connect $MAILSERVER:$MAILPORT
-# for unencrypted:
-###echomail | telnet $MAILSERVER $MAILPORT
+
+# Are we sending encrypted or unencrypted?
+if [ $CRYPT == 1 ]; then
+	echo "($($DATEFMT)) Status: using encrypted connection." >> $LOGFILE
+	# for starttls:
+	echomail | openssl s_client -starttls smtp -crlf -connect $MAILSERVER:$MAILPORT
+else
+	echo "($($DATEFMT)) Status: using unencrypted connection." >> $LOGFILE
+	# for unencrypted:
+	echomail | telnet $MAILSERVER $MAILPORT
+fi
 
 # Check for error from from openssl above
 if [ ${PIPESTATUS[1]} -ne 0 ]; then
 	# Got an error
-	echo -e "($($DATEFMT)) Status: openssl has failed to send mail!\n" >> $LOGFILE
-
+	echo "($($DATEFMT)) Status: openssl has failed to send mail!" >> $LOGFILE
 	# Exit with non-zero status
 	exit 1
 fi
 
-echo -e "($($DATEFMT)) Test email sent\n" >> $LOGFILE
+echo "($($DATEFMT)) Status: Test email sent" >> $LOGFILE
 
 # We'll try up to 3 times to get an email before failing
 for num in {1..3} 
 do
-	echo -e "($($DATEFMT)) attempt number $num\n" >> $LOGFILE
+	echo "($($DATEFMT)) Status: attempt number $num" >> $LOGFILE
 	# Check each files in $MAIL
-	for file in $( ls -1 $MAILDIR )
+	for file in $MAILDIR/*
 	do
-		echo -e "($($DATEFMT)) Checking $file for magic header.\n" >> $LOGFILE
-		# if we find CMD-MAILCHK: if not we got a bogus email
-		if $( grep -Fxq MAILCHK ${file} )
-		then
-			echo -e "($($DATEFMT))Found email with magic header.\n" >> $LOGFILE
-			EXIT_STATUS=0;
-			rm -f ${file}
-		else
-			echo -e "($($DATEFMT)) Found SPAM.\n" >> $LOGFILE
-			rm -f ${file}
+		echo "($($DATEFMT)) Checking $file for magic header." >> $LOGFILE
+		# if we find CHKMAIL, if not we got a bogus email
+		if [ -e ${file} ]; then
+			grep -q CHKMAIL ${file}
+			if [ $? == 0 ]; then
+				echo "($($DATEFMT)) Status: Found email with magic header." >> $LOGFILE
+				EXIT_STATUS=0
+				rm -f ${file}
+			else
+				echo "($($DATEFMT)) Status: Found SPAM." >> $LOGFILE
+				rm -f "$file"
+			fi
 		fi
 	done
-	# Sleep before trying again
-	sleep 1m
+	# Sleep before trying again if no mail found otherwise continue on
+	if [ $num -gt 1 ] && [ $EXIT_STATUS != 0 ]; then
+		sleep 1m
+	else
+		break
+	fi
 done
 
 # log exit status
-if [ EXIT_STATUS -eq 0 ]; then
-	echo -e "($($DATEFMT)) Status: email appears to be functioning normally.\n" >> $LOGFILE
+if [ $EXIT_STATUS == 0 ]; then
+	echo "($($DATEFMT)) Status: email appears to be functioning normally." >> $LOGFILE
 else
-	echo -e "($($DATEFMT)) Status: email appears to be broken.\n" $LOGFILE
+	echo "($($DATEFMT)) Status: email appears to be broken." >> $LOGFILE
 fi
 
-echo -e "Ending time: $($DATEFMT)\n" >> $LOGFILE
+echo "($($DATEFMT)) Status: Ended" >> $LOGFILE
 
 # Exit with the last known status (either failure from the beginning 
 # or success from the above loop)
