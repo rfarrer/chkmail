@@ -49,14 +49,21 @@ sleep 5
 } 
 
 # Are we sending encrypted or unencrypted?
-if [ $CRYPT == 1 ]; then
-	echo "($($DATEFMT)) Status: using encrypted connection." >> $LOGFILE
+if [ $CRYPT == "ssl" ]; then
+	echo "($($DATEFMT)) Status: using TLS connection." >> $LOGFILE
+	# for starttls:
+	echomail | openssl s_client -crlf -connect $MAILSERVER:$MAILPORT
+elif [ $CRYPT == "tls" ]; then
+	echo "($($DATEFMT)) Status: using TLS connection." >> $LOGFILE
 	# for starttls:
 	echomail | openssl s_client -starttls smtp -crlf -connect $MAILSERVER:$MAILPORT
-else
+elif [ $CRYPT == "plain" ]; then
 	echo "($($DATEFMT)) Status: using unencrypted connection." >> $LOGFILE
 	# for unencrypted:
 	echomail | telnet $MAILSERVER $MAILPORT
+else
+	echo "($($DATEFMT)) Status: unknown connection parameter $CRYPT, exiting." >> $LOGFILE
+	exit 1
 fi
 
 # Check for error from from openssl above
