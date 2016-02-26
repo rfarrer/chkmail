@@ -70,6 +70,8 @@ fi
 if [ ${PIPESTATUS[1]} -ne 0 ]; then
 	# Got an error
 	echo "($($DATEFMT)) Status: openssl has failed to send mail!" >> $LOGFILE
+	# execute alert script
+	./alert
 	# Exit with non-zero status
 	exit 1
 fi
@@ -110,6 +112,8 @@ if [ $EXIT_STATUS == 0 ]; then
 	echo "($($DATEFMT)) Status: email appears to be functioning normally." >> $LOGFILE
 else
 	echo "($($DATEFMT)) Status: email appears to be broken." >> $LOGFILE
+	# execute alert script
+	./alert
 fi
 
 echo "($($DATEFMT)) Status: Ended" >> $LOGFILE
